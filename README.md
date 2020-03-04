@@ -76,13 +76,13 @@ class
 - Adapter class
 - Host class
 
-Initialize RecyclerView
+Initialize RecyclerView in host class, in this case it would be Fragment class `onCreateView(...)` method
 ```kotlin
 crimeRecyclerView = view.findViewById(R.id.crime_recycler_view) as RecyclerView
 crimeRecyclerView.layoutManager = LinearLayoutManager(context)
 ```
 
-Setup Holder class
+Setup Holder class (this is the inner class in Fragment)
 ```kotlin
 private inner class CrimeHolder(view: View): RecyclerView.ViewHolder(view) {
 
@@ -99,7 +99,7 @@ private inner class CrimeHolder(view: View): RecyclerView.ViewHolder(view) {
 }
 ```
 
-Setup Adapter class
+Setup Adapter class (this is the inner class in Fragment)
 ```kotlin
 private inner class CrimeAdapter(var crimes: List<Crime>): RecyclerView.Adapter<CrimeHolder>() {
 
@@ -117,7 +117,7 @@ private inner class CrimeAdapter(var crimes: List<Crime>): RecyclerView.Adapter<
 }
 ```
 
-Wireup Adapter to RecyclerView
+Wireup Adapter to RecyclerView in host class
 ```kotlin
 val crimes = crimeListViewModel.crimes // crimes is List<Crime> in viewModel
 adapter = CrimeAdapter(crimes)
