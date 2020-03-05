@@ -144,6 +144,17 @@ outline:
 - [Repository](#repository) *optional*, to function as a distributor to storing and fetching data
 - [To use Room Instance](#to-use-room-instance)
 
+  
+>  
+> Room: flow conclusion
+>
+> App Start  
+> &nbsp;&nbsp;⤷ Application `onCreate()`  
+> &nbsp;&nbsp;&nbsp;&nbsp;⤷ Create Repository `.initialize(getApplication())` & `INSTANCE`  
+> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;⤷ Create Database `.build()`  
+> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;⤷ ViewModel get Repository Instance `.get()`  
+
+> if process death, the Repository `INSTANCE` & previous database `.build()` will still persist, only viewModel will re-`.get()` the `INSTANCE`
 
 ##### Entity
 Update the Model to be a Room `@Entity` and assign id as `@PrimaryKey`, now this class would be a crime table schema
@@ -334,8 +345,6 @@ class CrimeListFragment: Fragment() {
     }
 }
 ```
-
-
 
 
 
