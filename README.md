@@ -4,6 +4,8 @@
 #### Index:
 - [Fragments](#fragments)
 - [RecycleView](#recycleview)
+- ConstraintLayout
+- [Room database](#room-database)
 
 ---
 ### Fragments
@@ -123,6 +125,220 @@ val crimes = crimeListViewModel.crimes // crimes is List<Crime> in viewModel
 adapter = CrimeAdapter(crimes)
 crimeRecyclerView.adapter = adapter
 ```
+
+---
+### Room Database
+```gradle
+apply plugin: 'kotlin-kapt'
+...
+implementation 'androidx.room:room-runtime:x.x.x'
+kapt 'androidx.room:room-compiler:x.x.x'
+```
+
+outline:
+- [Entity](#entity) (from Model), this would be the table
+- [TypeConverter](#typeconverter), to convert non primitive type to primitive type to store in database table
+                 or to convert primitive type to non primitive type to let Model class use it
+- [Dao](#dao) (Data Access Object), to query data from database
+- [Database](#database)
+- [Repository](#repository) *optional*, to function as a distributor to storing and fetching data
+- [To use Room Instance](#to-use-room-instance)
+
+
+##### Entity
+Update the Model to be a Room `@Entity` and assign id as `@PrimaryKey`, now this class would be a crime table schema
+```kotlin
+@Entity
+data class Crime(@PrimaryKey val id: UUID = UUID.randomUUID(),
+                 var title: String = "",
+                 var date: Date = Date(),
+                 var isSolved: Boolean = false) {
+}
+```
+
+##### TypeConverter
+Convert the non primitive type to primitive to store in database and vice versa, here date and id
+
+```kotlin
+class CrimeTypeConverters {
+
+    // convert Date Object to record to database
+    @TypeConverter
+    fun fromDate(date: Date?): Long? {
+        return date?.time
+    }
+
+    // convert date from database to Date Object
+    @TypeConverter
+    fun toDate(millisSinceEpoch: Long?): Date? {
+        return millisSinceEpoch?.let {
+            Date(it)
+        }
+    }
+
+    // convert data from database to UUID Object
+    @TypeConverter
+    fun toUUID(uuid: String?): UUID? {
+        return UUID.fromString(uuid)
+    }
+
+    // convert UUID Object to record to database
+    @TypeConverter
+    fun fromUUID(uuid: UUID?): String? {
+        return uuid?.toString()
+    }
+}
+```
+
+##### Dao (Data Access Object)
+
+as a query function to store and fetch data from database, this is an `inferface` Room will generate the concrete class internally to implements these function and query we declare.
+
+```kotlin
+@Dao
+interface CrimeDao {
+
+    @Query("SELECT * FROM crime")
+    fun getCrimes(): LiveData<List<Crime>>
+
+    @Query("SELECT * FROM crime WHERE id=(:id)")
+    fun getCrime(id: UUID): LiveData<Crime?>
+}
+```
+
+##### Database
+Then create Database class to represent the database and to hold the table (Model/Entity class), it is an `abstract` class so we cannot make an instance of it, but to pass it to database builder later (on repository) to build a database with the Dao functions we declare inside.
+
+```kotlin
+@Database(entities = [Crime::class], version = 1)
+@TypeConverters(CrimeTypeConverters::class)
+abstract class CrimeDatabase: RoomDatabase() {
+
+    abstract fun crimeDao(): CrimeDao
+}
+```
+
+##### Repository
+
+Here we use a singleton pattern repository, where in 1 app, only got 1 repository instance, and we use it on Application Context when the application initialized.
+
+We use private constructor here to prevent others to instantiate the class, because this a regular class not abstract. so when need to use the class we have to call it like a static function `CrimeRepository.initialize(context)` and `CrimeRepository.get()`
+
+Then we build the database and access the Dao to store and fetch data.
+
+```kotlin
+private const val DATABASE_NAME = "crime-database"
+
+class CrimeRepository private constructor(context: Context){
+
+    private val database: CrimeDatabase = Room.databaseBuilder(
+        context.applicationContext,
+        CrimeDatabase::class.java,
+        DATABASE_NAME
+    ).build()
+
+    private val crimeDao = database.crimeDao()
+
+    fun getCrimes(): LiveData<List<Crime>> = crimeDao.getCrimes()
+
+    fun getCrime(id: UUID): LiveData<Crime?> = getCrime(id)
+
+    companion object {
+        private var INSTANCE: CrimeRepository? = null
+
+        fun initialize(context: Context) {
+            if (INSTANCE == null) {
+                INSTANCE = CrimeRepository(context)
+            }
+        }
+
+        fun get(): CrimeRepository {
+            return INSTANCE ?:
+                    throw IllegalStateException("CrimeRepository must be initialized")
+        }
+    }
+}
+```
+
+#### To use Room Instance
+Implementation here we want use a singleton on Application Context, so we make a class extending `Application()` and override the application `onCreate()` function to instantiate the Repository instance when we open the app and it runs the `onCreate()`
+
+```kotlin
+class CriminalIntentApplication: Application() {
+
+    override fun onCreate() {
+        super.onCreate()
+        CrimeRepository.initialize(this)
+    }
+}
+```
+
+To use this class on Application Context, we will reference it on AndroidManifext.xml, then when we open the app, this class will be called with the overridden onCreate
+```xml
+<application
+        ...
+        android:name=".CriminalIntentApplication"
+        ...
+```
+
+Then use the Repository on ViewModel, and observe the data in Fragment
+```kotlin
+class CrimeListViewModel: ViewModel() {
+
+    private val crimeRepository = CrimeRepository.get()
+    val crimeListLiveData = crimeRepository.getCrimes()
+}
+```
+
+Data observation here we do it after the view has been created and ready with `override fun onViewCreated(...)`
+
+But first when we initialize the recyclerView adapter we make it an empty list, the we fill it up in `onViewCreated(...)` with LiveData Observer.
+
+When we Observe the data we pass in two parameters, viewLifecycleOwner and Observer.
+- viewLifecycleOwner, the Observer will observe based on this viewLifeCycleOwner state, which means we will unsubscribe
+                      from observer if the view is in invalid state / being torn down) or app will crash.
+                      we use viewLifecycleOwner to keep track of the Fragment's view lifecycle (view = xml view?)
+- Observer, to observe data changes and update the static List<Crime>
+
+
+```kotlin
+class CrimeListFragment: Fragment() {
+    ...
+    private var adapter: CrimeAdapter? = CrimeAdapter(emptyList())
+    ...
+    
+    override fun onCreateView(...): View? {
+        ...
+        crimeRecyclerView = view.findViewById(R.id.crime_recycler_view) as RecyclerView
+        crimeRecyclerView.layoutManager = LinearLayoutManager(context)
+        crimeRecyclerView.adapter = adapter
+        return view
+    }
+    
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        crimeListViewModel.crimeListLiveData.observe(
+            viewLifecycleOwner,
+            Observer {
+                it?.let {
+                    Log.i("CrimeListFragment", "onViewCreated: got these many crime ${it.size}")
+                    updateUI(it)
+                }
+            }
+        )
+    }
+    
+    private fun updateUI(crimes: List<Crime>) {
+        adapter = CrimeAdapter(crimes)
+        crimeRecyclerView.adapter = adapter
+    }
+}
+```
+
+
+
+
+
 
 
 
