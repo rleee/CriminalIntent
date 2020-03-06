@@ -6,6 +6,7 @@
 - [RecycleView](#recycleview)
 - ConstraintLayout
 - [Room database](#room-database)
+- [Fragment Navigation](#fragment-navigation)
 
 ---
 ### Fragments
@@ -139,7 +140,7 @@ outline:
 - [Entity](#entity) (from Model), this would be the table
 - [TypeConverter](#typeconverter), to convert non primitive type to primitive type to store in database table
                  or to convert primitive type to non primitive type to let Model class use it
-- [Dao](#dao) (Data Access Object), to query data from database
+- [Dao](#dao-data-access-object) (Data Access Object), to query data from database
 - [Database](#database)
 - [Repository](#repository) *optional*, to function as a distributor to storing and fetching data
 - [To use Room Instance](#to-use-room-instance)
@@ -252,7 +253,7 @@ class CrimeRepository private constructor(context: Context){
 
     fun getCrimes(): LiveData<List<Crime>> = crimeDao.getCrimes()
 
-    fun getCrime(id: UUID): LiveData<Crime?> = getCrime(id)
+    fun getCrime(id: UUID): LiveData<Crime?> = crimeDao.getCrime(id)
 
     companion object {
         private var INSTANCE: CrimeRepository? = null
@@ -345,6 +346,179 @@ class CrimeListFragment: Fragment() {
     }
 }
 ```
+
+### Fragment Navigation
+
+To navigate from `CrimeListFragment` to `CrimeFragment`(details) we will have to go though the host activity to replace / launch the targeted fragment.
+
+What we do here is declare a `interface` on `CrimeListFragment` to be implemented in host activity, if the list item is clicked the certain action will be run from host activity (here we launch `CrimeFragment`)
+
+but we will have to attach the callback to the fragment first (`onAttach(...)`) and detach it once we left the fragment (`onDetach()`)
+
+```kotlin
+class CrimeListFragment: Fragment() {
+    
+    /**
+     * Required interface for hosting activities
+     */
+    interface Callbacks {
+        fun onCrimeSelected(crimeId: UUID)
+    }
+
+    private var callbacks: Callbacks? = null
+    
+    ...
+    
+    override fun onAttach(context: Context) {
+        super.onAttach(context)
+        callbacks = context as Callbacks?
+    }
+    
+    ...
+    
+    override fun onDetach() {
+        super.onDetach()
+        callbacks = null
+    }
+}
+```
+
+Then we pass the crimeId through `onClick()` in `ViewHolder`
+
+```kotlin
+class CrimeListFragment: Fragment() {
+
+    private inner class CrimeHolder(view: View)
+        : RecyclerView.ViewHolder(view), View.OnClickListener {
+        
+            ...
+            
+            override fun onClick(v: View?) {
+                callbacks?.onCrimeSelected(crime.id)
+            }
+            
+            ...
+        
+        }
+}
+```
+
+After that from `MainActivity` we will implement the interface and replace the fragment,  
+look closely from the code below we instantiate the `CrimeFragment` with the `companion object` we declare in that class,
+
+why we did that is because: easier to maintain the code and we also use `fragment argument` to pass `crimeId` to `CrimeFragment`.
+We also add this fragment replacement action to back stack and didn't name it anything / `null`
+
+```kotlin
+class MainActivity : AppCompatActivity(),
+    CrimeListFragment.Callbacks {
+    
+    ...
+    
+    override fun onCrimeSelected(crimeId: UUID) {
+        val fragment = CrimeFragment.newInstance(crimeId)
+        supportFragmentManager
+            .beginTransaction()
+            .replace(R.id.fragment_container, fragment)
+            .addToBackStack(null)
+            .commit()
+    }
+}
+```
+
+then the companion object in `CrimeFragment` to instantiate the `CrimeFragment` class and use `Fragment Argument` to pass bundled data, and from `onCreate` we will extract out the `crimeId` from `Fragment Argument`
+
+```kotlin
+private const val ARG_CRIME_ID = "crime_id"
+
+class CrimeFragment: Fragment() {
+
+    ...
+    
+    override fun onCreate(savedInstanceState: Bundle?) {
+        ...
+        val crimeId: UUID = arguments?.getSerializable(ARG_CRIME_ID) as UUID
+    }
+    
+    ...
+
+    companion object {
+            fun newInstance(crimeId: UUID): CrimeFragment {
+                val args = Bundle().apply {
+                    putSerializable(ARG_CRIME_ID, crimeId)
+                }
+                return CrimeFragment().apply {
+                    arguments = args
+                }
+            }
+        }
+}
+```
+
+Next we will make the `CrimeDetailViewModel` for `CrimeFragment` to fetch and store the data from Repository
+
+We pass in the `crimeId` through `loadCrime()` And we are using `MutableLiveData` to store the `crimeId`, and `LiveData` to watch (`Transformations.switchMap`) the value in `MutableLive` data change and fetch new Crime Details from database
+
+```kotlin
+class CrimeDetailViewModel: ViewModel() {
+
+    private val crimeRepository = CrimeRepository.get()
+    private val crimeIdLiveData = MutableLiveData<UUID>()
+
+    var crimeLiveData: LiveData<Crime?> =
+        Transformations.switchMap(crimeIdLiveData) { crimeId ->
+            crimeRepository.getCrime(crimeId)
+        }
+
+    fun loadCrime(crimeId: UUID) {
+        crimeIdLiveData.value = crimeId
+    }
+}
+```
+
+lastly implement the `CrimeDetailViewModel` to `CrimeFragment` and load the `crimeId` to ViewModel to start fetch the data, and `Observe` data changes at `onViewCreated(...)` to update the UI
+
+```kotlin
+class CrimeFragment: Fragment() {
+
+    ...
+    private val crimeDetailViewModel: CrimeDetailViewModel by lazy {
+        ViewModelProvider(this).get(CrimeDetailViewModel::class.java)
+    }
+    
+    override fun onCreate(savedInstanceState: Bundle?) {
+        ...
+        val crimeId: UUID = arguments?.getSerializable(ARG_CRIME_ID) as UUID
+        crimeDetailViewModel.loadCrime(crimeId)
+    }
+    
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        crimeDetailViewModel.crimeLiveData.observe(
+            viewLifecycleOwner,
+            Observer { crime ->
+                crime?.let {
+                    this.crime = it
+                    updateUI()
+                }
+            }
+        )
+    }
+    
+    private fun updateUI() {
+        titleField.setText(crime.title)
+        dateButton.text = crime.date.toString()
+        solvedCheckBox.apply {
+            isChecked = crime.isSolved
+            jumpDrawablesToCurrentState()
+        }
+    }
+}
+```
+
+
+
+
 
 
 
