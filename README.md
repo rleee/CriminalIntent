@@ -7,6 +7,7 @@
 - ConstraintLayout
 - [Room database](#room-database)
 - [Fragment Navigation](#fragment-navigation)
+- [Date picker dialog](#date-picker-dialog)
 
 ---
 ### Fragments
@@ -347,6 +348,7 @@ class CrimeListFragment: Fragment() {
 }
 ```
 
+---
 ### Fragment Navigation
 
 To navigate from `CrimeListFragment` to `CrimeFragment`(details) we will have to go though the host activity to replace / launch the targeted fragment.
@@ -515,6 +517,119 @@ class CrimeFragment: Fragment() {
     }
 }
 ```
+
+---
+### Date picker dialog
+
+we will be extending `DialogFragment()` for the date picker, and make a companion object to instantiate `DatePickerFragment` when the host fragment click a button, and pass the date used in host fragment to date picker using fragment budle
+```kotlin
+private const val ARG_DATE = "date" // fragment argument bundle identifier
+
+class DatePickerFragment: DialogFragment() {
+
+    override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
+    
+        val date = arguments?.getSerializable(ARG_DATE) as Date // check for fragment argument bundle
+        val calendar = Calendar.getInstance()
+        calendar.time = date
+        
+        val initialYear = calendar.get(Calendar.YEAR)
+        val initialMonth = calendar.get(Calendar.MONTH)
+        val initialDay = calendar.get(Calendar.DAY_OF_MONTH)
+
+        return DatePickerDialog(
+            requireContext(),
+            null,
+            initialYear,
+            initialMonth,
+            initialDay
+        )
+    }
+    
+    companion object {
+        fun newInstance(date: Date): DatePickerFragment {
+            val args = Bundle().apply {
+                putSerializable(ARG_DATE, date)
+            }
+            return DatePickerFragment().apply {
+                arguments = args
+            }
+        }
+    }
+}
+```
+
+to show the `DatePickerFragment` when click on host fragment we make a listener to the button, and set this fragment as the target fragment that dialog will return result to
+```kotlin
+...
+private const val DIALOG_DATE = "DialogDate" // just a name for the dialogFragment in Fragment Manager's list
+private const val REQUEST_DATE = 0 // identifier for return value from dialog to host fragment
+
+class CrimeFragment: Fragment() {
+
+    ...
+    
+    override fun onStart() {
+        ...
+        dateButton.setOnClickListener {
+            DatePickerFragment.newInstance(crime.date).apply {
+                setTargetFragment(this@CrimeFragment, REQUEST_DATE)
+                show(this@CrimeFragment.parentFragmentManager, DIALOG_DATE)
+            }
+        }
+    }
+}
+```
+
+then we create an interface to get the result back, and set the listener to know what to do when the date is chosen, in this case call the interface and return resultDate value to host fragment, then assign the listener to `onCreateDialog(...)`
+```kotlin
+class DatePickerFragment: DialogFragment() {
+
+    interface Callbacks {
+        fun onDateSelected(date: Date)
+    }
+    
+    override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
+    
+        val dateListener = DatePickerDialog.OnDateSetListener {
+                _: DatePicker, year: Int, month: Int, day: Int ->
+
+            val resultDate: Date = GregorianCalendar(year, month, day).time
+
+            targetFragment?.let {
+                (it as Callbacks).onDateSelected(resultDate)
+            }
+        }
+        ...
+        return DatePickerDialog(
+            requireContext(),
+            dateListener,
+            ...
+        )
+    }
+}
+```
+
+and implement it on host frgament
+```kotlin
+class CrimeFragment: Fragment(), DatePickerFragment.Callbacks {
+    ...
+    
+    override fun onDateSelected(date: Date) {
+        crime.date = date
+        updateUI()
+    }
+    
+    ...
+}
+```
+
+
+
+
+
+
+
 
 
 
