@@ -8,6 +8,7 @@
 - [Room database](#room-database)
 - [Fragment Navigation](#fragment-navigation)
 - [Date picker dialog](#date-picker-dialog)
+- [AppBar](#appbar)
 
 ---
 ### Fragments
@@ -620,6 +621,63 @@ class CrimeFragment: Fragment(), DatePickerFragment.Callbacks {
         updateUI()
     }
     
+    ...
+}
+```
+
+---
+### AppBar
+
+Create a new Menu xml (res directory, right click -> New -> Android Resource file -> Resource tyoe = Menu) for Appbar menu targeted at CrimeListFragment, name it `fragment_crime_list.xml`
+```xml
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+    <item
+        android:id="@+id/new_crime"
+        android:icon="@drawable/ic_menu_add"
+        android:title="@string/new_crime"
+        app:showAsAction="ifRoom|withText"/>
+
+</menu>
+```
+
+then override the `onCreateOptionsMenu()` to inflate and reference the menu
+```kotlin
+class CrimeListFragment: Fragment() {
+    ...
+    override fun onCreateOptionsMenu(menu: Menu, inflater: MenuInflater) {
+        super.onCreateOptionsMenu(menu, inflater)
+        inflater.inflate(R.menu.fragment_crime_list, menu)
+    }
+    ...
+}
+```
+after that we need to let Fragment Manager know, there is a menu option, and let Fragment Manager to call the above overridden function
+```kotlin
+class CrimeListFragment: Fragment() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setHasOptionsMenu(true)
+    }
+    ...
+}
+```
+
+then when user pressed the menu, we need a callback and listener
+```kotlin
+class CrimeListFragment: Fragment() {
+    ...
+    override fun onOptionsItemSelected(item: MenuItem): Boolean {
+        return when (item.itemId) {
+            R.id.new_crime -> {
+                val crime = Crime()
+                crimeListViewModel.addCrime(crime)
+                callbacks?.onCrimeSelected(crime.id)
+                true
+            }
+            else -> return super.onOptionsItemSelected(item)
+        }
+    }
     ...
 }
 ```
