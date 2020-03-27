@@ -146,6 +146,7 @@ outline:
 - [Database](#database)
 - [Repository](#repository) *optional*, to function as a distributor to storing and fetching data
 - [To use Room Instance](#to-use-room-instance)
+- [Add column in table](#add-column-in-table)
 
   
 >  
@@ -346,6 +347,40 @@ class CrimeListFragment: Fragment() {
         adapter = CrimeAdapter(crimes)
         crimeRecyclerView.adapter = adapter
     }
+}
+```
+
+#### Add column in table
+To add column in database table we need to migrate the database
+
+in Crime `Database.kt`
+```kotlin
+@Database(entities = [Crime::class], version=2) // change to version=2
+@TypeConverters(CrimeTypeConverters::class)
+abstract class CrimeDatabase: RoomDatabase() {
+
+    ...
+}
+
+val migration_1_2 = object : Migration(1, 2) {
+    override fun migrate(database: SupportSQLiteDatabase) {
+        database.execSQL(
+            "ALTER TABLE Crime ADD COLUMN suspect TEXT NOT NULL DEFAULT ''"
+        )
+    }
+}
+```
+
+Then at `CrimeRepository.kt`
+```kotlin
+class CrimeRepository private constructor(context: Context){
+
+    private val database: CrimeDatabase = Room.databaseBuilder(
+        context.applicationContext,
+        CrimeDatabase::class.java,
+        DATABASE_NAME
+        ).addMigrations(migration_1_2)
+        .build()
 }
 ```
 
