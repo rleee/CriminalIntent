@@ -147,6 +147,7 @@ outline:
 - [Repository](#repository) *optional*, to function as a distributor to storing and fetching data
 - [To use Room Instance](#to-use-room-instance)
 - [Add column in table](#add-column-in-table)
+- [Using an Executor](#using-an-executor)
 
   
 >  
@@ -384,6 +385,32 @@ class CrimeRepository private constructor(context: Context){
 }
 ```
 
+#### Using an Executor
+Executor is an abject that references a thread. and to use Executor we will use `execute` and pass a code block of that we will do with this executor.
+
+```kotlin
+class CrimeRepository private constructor(context: Context){
+    ...
+    
+    private val executor = Executors.newSingleThreadExecutor()
+    ...
+    
+    fun updateCrime(crime: Crime) {
+        executor.execute {
+            crimeDao.updateCrime(crime)
+        }
+    }
+
+    fun addCrime(crime: Crime) {
+        executor.execute {
+            crimeDao.addCrime(crime)
+        }
+    }
+}
+```
+
+The `newSingleThreadExecutor()` will return an Executor instance that points to a new thread, so the code block we write will run off the main thread.
+
 ---
 ### Fragment Navigation
 
@@ -458,7 +485,7 @@ class MainActivity : AppCompatActivity(),
         supportFragmentManager
             .beginTransaction()
             .replace(R.id.fragment_container, fragment)
-            .addToBackStack(null)
+            .addToBackStack(null) // this is to add this replacing fragment to back stack, so when user press back, it'll reverse this transaction back to CrimeListFragment, the null is just the name for this backstack transaction
             .commit()
     }
 }
