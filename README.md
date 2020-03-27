@@ -9,6 +9,7 @@
 - [Fragment Navigation](#fragment-navigation)
 - [Date picker dialog](#date-picker-dialog)
 - [AppBar](#appbar)
+- [Implicit Intent](#implicit-intent)
 
 ---
 ### Fragments
@@ -744,9 +745,96 @@ class CrimeListFragment: Fragment() {
 }
 ```
 
+---
+### Implicit Intent
+#### Sending crime report
 
+```kotlin
+class CrimeFragment: Fragment(), DatePickerFragment.Callbacks {
 
+    ...
+    private lateinit var reportButton: Button
+    
+    ...
+    override fun onStart() {
+        super.onStart()
+        ...
+        reportButton.setOnClickListener {
+            Intent(Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(Intent.EXTRA_TEXT, getCrimeReport())
+                putExtra(Intent.EXTRA_SUBJECT, getString(R.string.crime_report_subject))
+            }.also { intent ->
+                val chooserIntent = Intent.createChooser(intent, getString(R.string.send_report)) // Chooser to let user choose which app to send this intent to
+                startActivity(chooserIntent)
+            }
+        }
+    }
+}
+```
 
+#### Asking android for a contact
+
+```kotlin
+...
+private const val REQUEST_CONTACT = 1
+...
+class CrimeFragment: Fragment(), DatePickerFragment.Callbacks {
+
+    ...
+    private lateinit var suspectButton: Button
+    
+    ...
+    override fun onStart() {
+        super.onStart()
+        ...
+        suspectButton.apply {
+            val pickContactIntent = Intent(Intent.ACTION_PICK, ContactsContract.Contacts.CONTENT_URI)
+            setOnClickListener {
+                startActivityForResult(pickContactIntent, REQUEST_CONTACT)
+            }
+            
+            // Check are there any app can open this intent
+            // PackageManager knows ablout all the components installed on the device
+            val packageManager: PackageManager = requireActivity().packageManager
+            
+            // ask PackageManager to find activity that matches the intent we gave
+            val resolvedActivity: ResolveInfo? = packageManager.resolveActivity(
+                pickContactIntent, PackageManager.MATCH_DEFAULT_ONLY)
+            
+            if (resolvedActivity == null) {
+                isEnabled = false // disable button if no contact app found
+            }
+        }
+    }
+    
+    ...
+    
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        when {
+            resultCode != Activity.RESULT_OK -> return
+            requestCode == REQUEST_CONTACT && data != null -> {
+                val contactUri: Uri = data.data ?: return
+                val queryFields = arrayOf(ContactsContract.Contacts.DISPLAY_NAME) // the fields we want to be returned, in this case DISPLAY_NAME
+                val cursor = requireActivity().contentResolver // start query
+                    .query(contactUri, queryFields, null, null, null)
+
+                cursor?.use {
+                    if (it.count == 0) {
+                        return
+                    }
+                    it.moveToFirst()
+                    val suspect = it.getString(0)
+                    crime.suspect = suspect
+                    crimeDetailViewModel.saveCrime(crime)
+                    suspectButton.text = suspect
+                }
+            }
+        }
+    }
+}
+```
 
 
 
