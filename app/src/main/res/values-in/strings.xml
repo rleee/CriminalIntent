@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">HajatKriminal</string>
+
+    <string name="crime_title_hint">Masukkan judul kasus.</string>
+    <string name="crime_title_label">Judul</string>
+    <string name="crime_details_label">Detail</string>
+    <string name="crime_solved_label">Terpecahkan</string>
+
+    <string name="new_crime">Kasus Baru</string>
+
+    <string name="crime_suspect_text">Pilih Tersangka</string>
+    <string name="crime_report_text">Kirim Laporan Kriminal</string>
+
+    <string name="crime_report">%1$s! Kasus kriminal ditemukan pada %2$s. %3$s, dan %4$s</string>
+    <string name="crime_report_solved">Kasus telah terpecahkan</string>
+    <string name="crime_report_unsolved">Kasus belum dipecahkan</string>
+    <string name="crime_report_no_suspect">tidak ada tersangka</string>
+    <string name="crime_report_suspect">tersangka adalah %s</string>
+    <string name="crime_report_subject">HajatKriminal Laporan Kriminal</string>
+    <string name="send_report">Kirim laporan kriminal melalui</string>
+</resources>
