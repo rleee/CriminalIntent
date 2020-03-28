@@ -10,6 +10,7 @@
 - [Date picker dialog](#date-picker-dialog)
 - [AppBar](#appbar)
 - [Implicit Intent](#implicit-intent)
+- [Taking pictures with intents](#taking-picture-with-intents)
 
 ---
 ### Fragments
@@ -835,15 +836,201 @@ class CrimeFragment: Fragment(), DatePickerFragment.Callbacks {
     }
 }
 ```
+---
+### Taking pictures with intents
 
+Here we're going to use camera app to take picture and save it to CriminalIntent private project folder
+1. work on manifest
+    - uses-feature: declaring CriminalIntent app will use camera feature
+    - name: FileProvider
+    - authorities: location file will be saved to
+    - exported: no one can use the provider unless premission is granted
+    - permission: grand permission to write to URI on the authority
+    - meta-data: create extra xml file to map the root of private storage to `name="crime_photos"`
+2. `Crime.kt` set filename (photoFileName)
+3. `CrimeRepository.kt` get file location
+4. `CrimeFragment.kt` save to URI
 
+On `AndroidManifest.xml`
+```xml
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.danlee.criminalintent">
+    
+    <uses-feature
+        android:name="android.hardware.camera2"
+        android:required="false" />
+    ...
+    
+    <application
+         ...
+         <activity android:name=".MainActivity">
+            ...
+         </activity>
 
+         <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="com.danlee.criminalintent.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/files" />
 
+        </provider>
+</manifest>
+```
 
+Create an xml file to map file root to name `crime-photos`
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <files-path
+        name="crime_photos"
+        path="."/>
+</paths>
+```
 
+add property in `Crime.kt` to set the photo name
+```kotlin
+@Entity
+data class Crime(...
+) {
+    val photoFileName
+        get() = "IMG_$id.jpg"
+}
+```
 
+then on repository we will create a method to return the photo location
+```kotlin
+class CrimeRepository private constructor(context: Context) {
+    ...
+    private val fileDir = context.applicationContext.filesDir
+    
+    ...
+    fun getPhotoFile(crime: Crime): File {
+    
+        Log.d("AppDebug", "getPhotoFile: $fileDir")
+        // will print: D/AppDebug: getPhotoFile: /data/user/0/com.danlee.criminalintent/files
+        
+        return File(fileDir, crime.photoFileName) // this is the return value: /data/user/0/com.danlee.criminalintent/files/IMG_6733af95-f039-4e3d-a109-bbd521fa448f.jpg
+    }
+}
+```
 
+then on `CrimeFragment.kt` we will use the URI to store and fetch the photo
+```kotlin
+...
+private const val REQUEST_PHOTO = 2
+...
+class CrimeFragment : Fragment(), DatePickerFragment.Callbacks {
+    ...
+    private lateinit var photoFile: File
+    private lateinit var photoUri: Uri
+    ...
+    
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        crimeDetailViewModel.crimeLiveData.observe(
+            viewLifecycleOwner,
+            Observer { crime ->
+                crime?.let {
+                    ...
+                    photoFile = crimeDetailViewModel.getPhotoFile(crime)
+                    Log.d("AppDebug", "onViewCreated: $photoFile")
+                    // D/AppDebug: onViewCreated: /data/user/0/com.danlee.criminalintent/files/IMG_6733af95-f039-4e3d-a109-bbd521fa448f.jpg
+                    
+                    photoUri = FileProvider.getUriForFile(
+                        requireActivity(),
+                        "com.danlee.criminalintent.fileprovider",
+                        photoFile
+                    )
+                    Log.d("AppDebug", "onViewCreated: $photoUri")
+                    // D/AppDebug: onViewCreated: content://com.danlee.criminalintent.fileprovider/crime_photos/IMG_6733af95-f039-4e3d-a109-bbd521fa448f.jpg
+                 
+                    ...
+                }
+            }
+        )
+    }
+    
+    ...
+    
+    override fun onStart() {
+        super.onStart()
+        ...
+        
+        photoButton.apply {
+            val packageManager: PackageManager = requireActivity().packageManager
+            val captureImage = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
+            
+            // check if there are any app can use `MediaStore.ACTION_IMAGE_CAPTURE`
+            val resolvedActivity: ResolveInfo? =
+                packageManager.resolveActivity(captureImage, PackageManager.MATCH_DEFAULT_ONLY)
+            if (resolvedActivity == null) {
+                isEnabled = false
+            }
 
+            setOnClickListener {
+                // here is to point where should camera store the output (to photoURI)
+                captureImage.putExtra(MediaStore.EXTRA_OUTPUT, photoUri)
+
+                val cameraActivities: List<ResolveInfo> = packageManager.queryIntentActivities(
+                    captureImage,
+                    PackageManager.MATCH_DEFAULT_ONLY
+                )
+                for (cameraActivity in cameraActivities) {
+                    requireActivity().grantUriPermission(
+                        cameraActivity.activityInfo.packageName,
+                        photoUri,
+                        Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                    )
+                }
+                startActivityForResult(captureImage, REQUEST_PHOTO)
+            }
+        }
+    }
+    
+    ...
+    
+    override fun onDetach() {
+        super.onDetach()
+        
+        //  we revoke the premission to access out private URI
+        requireActivity().revokeUriPermission(photoUri, Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+    }
+    
+    ...
+    
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        when {
+            ...
+            
+            requestCode == REQUEST_PHOTO -> {
+            
+                // after we get the result, we revoke the premission to access out private URI
+                requireActivity().revokeUriPermission( 
+                    photoUri,
+                    Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                )
+                
+                updatePhotoView()
+            }
+        }
+    }
+    
+    ...
+    
+    private fun updatePhotoView() {
+        if (photoFile.exists()) {
+            val bitmap = getScaledBitmap(photoFile.path, requireActivity()) // this is another function we created to scale down the bitmap size
+            photoView.setImageBitmap(bitmap)
+        } else {
+            photoView.setImageBitmap(null)
+        }
+    }
+}
+```
 
 
 
