@@ -38,6 +38,7 @@ class MainActivity : AppCompatActivity() {
 Fragment has lifecycle **similar** to Activity [credit: tutorialspoint.com](https://www.tutorialspoint.com/android/android_fragments.htm)
 
 ![tutorialspoint.com](https://www.tutorialspoint.com/android/images/fragment.jpg)
+![developer.android.com](https://developer.android.com/images/activity_fragment_lifecycle.png)
 
 Difference between `onCreate(...)` and `onCreateView(...)`
 - `onCreate(...)`
